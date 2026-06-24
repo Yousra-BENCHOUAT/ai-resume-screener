@@ -1,0 +1,433 @@
+{
+  "name": "AI Resume Screener",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Dépôt de CV",
+        "formDescription": "Uploadez votre CV pour analyse automatique",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "CV (PDF)",
+              "fieldType": "file",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Offre d'emploi (description du poste recherché)",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7c4cf45c-d284-459e-9d2b-61efcc4535c8",
+      "name": "On form submission",
+      "webhookId": "54e8c85e-4ec7-4c7b-a13a-9ca81aea1887"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "CV__PDF_",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "be2e6952-ea31-4924-99c0-1b7a6e897231",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"llama-3.3-70b-versatile\",\n  messages: [\n    {\n      role: \"system\",\n      content: \"Tu es un assistant RH expert. Tu extrais les informations cles d'un CV et tu reponds UNIQUEMENT en JSON valide, sans aucun texte avant ou apres, sans markdown, sans balises de code.\"\n    },\n    {\n      role: \"user\",\n      content: \"Extrait les informations suivantes de ce CV et reponds en JSON avec exactement ces champs : nom, email, telephone, annees_experience (nombre decimal, calcule en additionnant la duree de toutes les experiences professionnelles et stages mentionnes, par exemple 2 mois = 0.17, 6 mois = 0.5 ; si aucune experience n'est mentionnee, mets 0), nombre_stages (nombre entier de stages effectues), competences (liste de strings, IMPORTANT: liste chaque technologie, langage de programmation, framework, outil ou base de donnees INDIVIDUELLEMENT et PRECISEMENT, par exemple Java, Spring Boot, Docker, MySQL, ASP.NET Core - ne mets JAMAIS les categories ou titres de section du CV comme Outils DevOps ou Langages et Frameworks ou Methodologies Agiles, extrait uniquement les noms specifiques mentionnes a l'interieur de ces categories), formation, langues (liste de strings), projets_academiques (liste de strings, decris brievement chaque projet avec les technologies utilisees). Voici le texte du CV: \" + JSON.stringify($json.text)\n    }\n  ],\n  temperature: 0.1\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "2c7d9e89-193a-4322-8559-a2c49a0656f2",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "B7xxBJgQEnX0dwBb",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"llama-3.3-70b-versatile\",\n  messages: [\n    {\n      role: \"system\",\n      content: \"Tu es un recruteur technique senior avec 15 ans d'experience. Tu evalues les candidats de maniere stricte, objective et factuelle, en te basant UNIQUEMENT sur les informations presentes dans le CV, y compris les projets academiques. Tu ne fais AUCUNE supposition. Si une information n'est pas presente, tu la traites comme absente, pas comme negative ni positive. Sois SEVERE dans ton evaluation : un score au-dessus de 70 doit etre reserve aux candidats qui possedent au moins 60% des competences explicitement demandees dans l'offre. Un candidat sans aucune des competences cles demandees doit avoir un score inferieur a 30, meme si son profil est interessant par ailleurs. Tu reponds UNIQUEMENT en JSON valide, sans texte avant/apres, sans markdown, sans balises de code.\"\n    },\n    {\n      role: \"user\",\n      content: \"OFFRE D'EMPLOI:\\n\" + $('On form submission').first().json[\"Offre d'emploi (description du poste recherché)\"] + \"\\n\\nPROFIL CANDIDAT (extrait du CV, incluant projets academiques):\\n\" + JSON.stringify($json, null, 2) + \"\\n\\nEvalue ce candidat selon cette grille stricte:\\n1. Correspondance des competences techniques avec celles demandees dans l'offre\\n2. Pertinence des projets academiques par rapport au poste\\n3. Pertinence de la formation\\n4. Experience PERTINENTE uniquement pour ce poste specifique (ignore toute experience professionnelle sans rapport avec le domaine de l'offre, par exemple un job dans la restauration ne compte pas pour un poste de developpeur)\\n\\nReponds en JSON avec exactement ces champs:\\n- score_matching (nombre 0-100)\\n- statut (string : QUALIFIE si score >= 70, A_CONSIDERER si score entre 40 et 69, NON_QUALIFIE si score < 40)\\n- competences_matchees (liste des competences du CV qui correspondent a celles demandees)\\n- competences_manquantes (liste des competences demandees que le candidat n'a PAS)\\n- experience_pertinente_mois (nombre entier, nombre de mois d'experience PERTINENTE pour ce poste specifique, 0 si aucune)\\n- projets_pertinents (liste des projets academiques du CV qui sont pertinents pour ce poste, vide si aucun)\\n- recommandation (string courte et factuelle)\"\n    }\n  ],\n  temperature: 0.1\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "8e5e3ebc-72ab-4085-9005-586559f86dce",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "B7xxBJgQEnX0dwBb",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawContent = $input.first().json.choices[0].message.content;\nconst cleanContent = rawContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\nconst parsed = JSON.parse(cleanContent);\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "ef6edda5-bc66-4815-a78d-f1929f8d371c",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawContent = $input.first().json.choices[0].message.content;\nconst cleanContent = rawContent.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\nconst scoring = JSON.parse(cleanContent);\nconst profile = $('Code').first().json;\n\nreturn [{\n  json: {\n    nom: profile.nom,\n    email: profile.email,\n    telephone: \"'\" + profile.telephone,\n    nombre_stages: profile.nombre_stages,\n    experience_pertinente_mois: scoring.experience_pertinente_mois,\n    competences: profile.competences.join(\", \"),\n    formation: profile.formation,\n    projets_academiques: profile.projets_academiques.join(\" | \"),\n    score_matching: scoring.score_matching,\n    statut: scoring.statut,\n    competences_matchees: scoring.competences_matchees.join(\", \"),\n    competences_manquantes: scoring.competences_manquantes.join(\", \"),\n    projets_pertinents: scoring.projets_pertinents.join(\", \"),\n    recommandation: scoring.recommandation,\n    date_analyse: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "644dfe6b-d296-47b3-8751-f4d7536364fd",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "16GuOzCZSaLtdzUj5I0RyiULChCMrkmp44RVpFyq12Ww",
+          "mode": "list",
+          "cachedResultName": "AI Resume Screener - Candidats",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16GuOzCZSaLtdzUj5I0RyiULChCMrkmp44RVpFyq12Ww/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Feuille 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/16GuOzCZSaLtdzUj5I0RyiULChCMrkmp44RVpFyq12Ww/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "nom",
+              "displayName": "nom",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telephone",
+              "displayName": "telephone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "annees_experience",
+              "displayName": "annees_experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "competences",
+              "displayName": "competences",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "formation",
+              "displayName": "formation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score_matching",
+              "displayName": "score_matching",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "points_forts",
+              "displayName": "points_forts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "points_faibles",
+              "displayName": "points_faibles",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recommandation",
+              "displayName": "recommandation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_analyse",
+              "displayName": "date_analyse",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "0780e08e-7be6-422d-83fb-5d90be146c81",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3b1UbnlMbfJgRTyA",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ba6e4ab4-969d-4a7c-9860-f476721d2e4e",
+              "leftValue": "={{ $json.score_matching }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "b4b48195-5d96-41b5-aad9-af03cfe51459",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BBJJWPYVB",
+          "mode": "id"
+        },
+        "text": "=🎯 Candidat prometteur détecté !\n\nPoste : {{ $('On form submission').first().json[\"Offre d'emploi (description du poste recherché)\"] }}\nNom : {{ $json.nom }}\nScore : {{ $json.score_matching }}/100\nStatut : {{ $json.statut }}\nEmail : {{ $json.email }}\nExpérience pertinente : {{ $json.experience_pertinente_mois }} mois\n\n✅ Compétences matchées : {{ $json.competences_matchees }}\n❌ Compétences manquantes : {{ $json.competences_manquantes }}\n\n📁 Projets pertinents : {{ $json.projets_pertinents }}\n💬 Recommandation : {{ $json.recommandation }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1664,
+        -96
+      ],
+      "id": "5d6c2ca4-9e29-49c0-86bf-80376ccc6d96",
+      "name": "Send a message",
+      "webhookId": "9c134b5a-c6f3-412e-a223-385973651a73",
+      "credentials": {
+        "slackApi": {
+          "id": "6wlCdx5I4FosWKes",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "cec6451f-17fa-4de2-b17c-c5ecf7231594",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9ae305c79dcb773731e6fdfdfc0c55dba3963f9d6d88f7f0a6fccb5e80a63222"
+  },
+  "id": "cB1WmxGJKC61bJQt",
+  "tags": []
+}
